@@ -1,9 +1,10 @@
+import os
 import requests
 import json
 from datetime import datetime, timedelta
 import pandas as pd
-import os
 import sys
+from dotenv import load_dotenv
 from garminconnect import (
     Garmin,
     GarminConnectConnectionError,
@@ -11,10 +12,11 @@ from garminconnect import (
     GarminConnectAuthenticationError
 )
 
+load_dotenv()
 
 def get_sleep_data(email, password, start_date=None, end_date=None):
     """
-    Extract sleep data from Garmin Connect with corrected data structure parsing.
+    Extract sleep data from Garmin Connect with specified fields only.
     """
     try:
         print("Attempting to connect to Garmin...")
@@ -57,23 +59,12 @@ def get_sleep_data(email, password, start_date=None, end_date=None):
                     daily_sleep = {
                         'date': current_date.strftime('%Y-%m-%d'),
                         'total_sleep': daily_sleep_dto.get('sleepTimeSeconds', 0) / 3600,
-                        'deep_sleep': daily_sleep_dto.get('deepSleepSeconds', 0) / 3600,
-                        'light_sleep': daily_sleep_dto.get('lightSleepSeconds', 0) / 3600,
-                        'rem_sleep': daily_sleep_dto.get('remSleepSeconds', 0) / 3600,
-                        'awake_time': daily_sleep_dto.get('awakeSleepSeconds', 0) / 3600,
                         'sleep_score': daily_sleep_dto.get('sleepScores', {}).get('overall', {}).get('value'),
                         'start_time': start_time.strftime('%Y-%m-%d %H:%M:%S') if start_time else None,
                         'end_time': end_time.strftime('%Y-%m-%d %H:%M:%S') if end_time else None,
                         'resting_heart_rate': sleep_data.get('restingHeartRate'),
-                        'avg_stress': daily_sleep_dto.get('avgSleepStress'),
-                        'body_battery_change': sleep_data.get('bodyBatteryChange'),
                         'avg_hrv': sleep_data.get('avgOvernightHrv'),
-                        'awake_count': daily_sleep_dto.get('awakeCount'),
-                        'sleep_quality': daily_sleep_dto.get('sleepScores', {}).get('overall', {}).get('qualifierKey'),
-                        'average_respiration': daily_sleep_dto.get('averageRespirationValue'),
-                        'lowest_respiration': daily_sleep_dto.get('lowestRespirationValue'),
-                        'highest_respiration': daily_sleep_dto.get('highestRespirationValue'),
-                        'restless_moments': sleep_data.get('restlessMomentsCount')
+                        'sleep_quality': daily_sleep_dto.get('sleepScores', {}).get('overall', {}).get('qualifierKey')
                     }
 
                     print(f"Processed sleep data: {daily_sleep}")
@@ -92,15 +83,6 @@ def get_sleep_data(email, password, start_date=None, end_date=None):
         df = pd.DataFrame(all_sleep_data)
 
         if not df.empty:
-            # Add calculated columns
-            df['sleep_efficiency'] = (df['deep_sleep'] + df['light_sleep'] + df['rem_sleep']) / df['total_sleep'] * 100
-            df['deep_sleep_percentage'] = df['deep_sleep'] / df['total_sleep'] * 100
-            df['rem_sleep_percentage'] = df['rem_sleep'] / df['total_sleep'] * 100
-
-            # Replace NaN values with 0 for numeric columns
-            numeric_columns = ['sleep_efficiency', 'deep_sleep_percentage', 'rem_sleep_percentage']
-            df[numeric_columns] = df[numeric_columns].fillna(0)
-
             print("\nFinal DataFrame head:")
             print(df.head())
         else:
@@ -119,15 +101,19 @@ def get_sleep_data(email, password, start_date=None, end_date=None):
 
     return None
 
-
 if __name__ == "__main__":
-    email = os.environ.get('GARMIN_EMAIL')
-    password = os.environ.get('GARMIN_PASSWORD')
+    # Get email and password from environment variables
+    email = os.getenv('GARMIN_EMAIL')
+    password = os.getenv('GARMIN_PASSWORD')
+
+    if not email or not password:
+        print("Error: GARMIN_EMAIL and GARMIN_PASSWORD environment variables must be set.")
+        sys.exit(1)
 
     sleep_df = get_sleep_data(
         email=email,
         password=password,
-        start_date=(datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+        start_date=(datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
     )
 
     if sleep_df is not None:
